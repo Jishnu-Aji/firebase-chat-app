@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ──────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    // ─── Rooms ────────────────────────────────────────────────────
+    match /rooms/{roomId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 50;
+      allow update: if isAuthenticated()
+        && request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(['memberCount']);
+      allow delete: if false;
+
+      // ─── Messages ────────────────────────────────────────────────
+      match /messages/{messageId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated()
+          && isOwner(request.resource.data.uid)
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000;
+        allow delete: if isAuthenticated()
+          && isOwner(resource.data.uid);
+        allow update: if false;
+      }
+    }
+
+    // ─── Users ────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isOwner(userId);
+    }
+
+    // ─── Typing Indicators ────────────────────────────────────────
+    match /typing/{roomId}/users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isOwner(userId);
+    }
+  }
+}
